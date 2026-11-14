@@ -1,23 +1,40 @@
 
 {
-  "name": "Sanmarino User Tagger",
-  "description": "Telegram User Tagger Bot",
-  "keywords": ["telegram", "bot", "aiogram"],
-  "buildpacks": [
+  "name": "Sancak Tag Bot",
+  "description": "Sancak Tag Bot - Telegram etiketleme botu",
+  "keywords": [
+    "telegram",
+    "bot",
+    "tag"
+  ],
+  "env": {
+    "BOT_TOKEN": {
+      "description": "BotFather üzerinden aldığın ana bot tokeni",
+      "required": true
+    },
+    "LOG_CHAT_ID": {
+      "description": "Gizli log grubunun ID numarası",
+      "value": "-1004404608158"
+    },
+    "CLONE_ENCRYPTION_KEY": {
+      "description": "Klon bot tokenlerini şifrelemek için kullanılacak Fernet anahtarı",
+      "required": true
+    }
+  },
+  "addons": [
     {
-      "url": "heroku/python"
+      "plan": "heroku-postgresql:essential-0"
     }
   ],
   "formation": {
     "worker": {
       "quantity": 1,
-      "size": "eco"
+      "size": "basic"
     }
   },
-  "env": {
-    "BOT_TOKEN": {
-      "description": "Telegram bot token",
-      "required": true
+  "buildpacks": [
+    {
+      "url": "heroku/python"
     }
-  }
+  ]
 }
