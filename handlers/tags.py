@@ -3,9 +3,13 @@ import time
 
 from aiogram import Router
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import (
+    Message,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+)
 
-from config import TAG_COOLDOWN
+from config import TAG_COOLDOWN, REQUIRED_CHANNELS
 from database.db import get_members, save_tag_log
 from services.tag_service import (
     create_mention,
@@ -13,6 +17,8 @@ from services.tag_service import (
     create_emoji_mention,
     send_tag_messages,
 )
+from services.subscription import check_subscription
+from services.clone_runtime import clone_runtime
 
 
 router = Router()
@@ -37,8 +43,60 @@ async def is_group_admin(message: Message) -> bool:
 
 
 async def can_tag(message: Message) -> bool:
+    if not message.from_user:
+        return False
+
     if not await is_group_admin(message):
-        await message.reply("❌ Bu komutu yalnızca grup yöneticileri kullanabilir.")
+        await message.reply(
+            "❌ Bu komutu yalnızca grup yöneticileri kullanabilir."
+        )
+        return False
+
+    # Klon botlarda da aboneliği ana bot kontrol eder.
+    check_bot = clone_runtime.main_bot or message.bot
+
+    try:
+        subscribed = await check_subscription(
+            check_bot,
+            message.from_user.id
+        )
+    except Exception:
+        subscribed = False
+
+    if not subscribed:
+        bot_info = await message.bot.get_me()
+
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="🤖 Bota Özelden Start Ver",
+                        url=f"https://t.me/{bot_info.username}?start=subscribe"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="📢 Birinci Kanal",
+                        url="https://t.me/sancakmain"
+                    ),
+                    InlineKeyboardButton(
+                        text="📢 İkinci Kanal",
+                        url="https://t.me/emeklisanalci"
+                    )
+                ]
+            ]
+        )
+
+        await message.reply(
+            "⚠️ <b>Abonelik Gerekli!</b>\n\n"
+            "Bu botu kullanabilmek için lütfen önce "
+            "bota özelden <b>/start</b> verin.\n\n"
+            "Ardından aşağıdaki iki kanala da abone olun. "
+            "Aboneliklerinizi tamamladıktan sonra komutu "
+            "tekrar kullanabilirsiniz.",
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
         return False
 
     now = time.time()
@@ -131,4 +189,3 @@ async def username_tag_command(message: Message):
 @router.message(Command("etag"))
 async def emoji_tag_command(message: Message):
     await run_tag(message, "etag")
-  
