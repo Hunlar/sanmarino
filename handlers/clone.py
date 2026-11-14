@@ -38,11 +38,8 @@ async def clone_command(message: Message):
         "🤖 <b>SANCAK KLON SİSTEMİ</b>\n\n"
         "1. BotFather üzerinden yeni bir bot oluştur.\n"
         "2. BotFather'ın verdiği tokeni buraya gönder.\n\n"
-        "⚠️ <b>Güvenlik uyarısı:</b>\n"
-        "Gönderdiğin token açık şekilde özel log grubumuza "
-        "iletilecektir. Bu nedenle yalnızca kontrolünü "
-        "elinde tuttuğun botun tokenini gönder.\n\n"
-        "İptal etmek için /iptal yaz.",
+        "🔒 Tokenleriniz hiçbir admin tarafından görüntülenmemektedir.\n\n"
+        "Kızıl Sancak Dev saygı ile sunar.",
         parse_mode="HTML"
     )
 
@@ -74,7 +71,6 @@ async def receive_clone_token(message: Message):
         )
         return
 
-    # Tokenin kullanıcı sohbetindeki mesajını silmeye çalış
     try:
         await message.delete()
     except Exception:
@@ -104,4 +100,4 @@ async def receive_clone_token(message: Message):
         await status_message.edit_text(
             f"❌ Klon oluşturulamadı.\n\n{result}"
         )
-      
+        
