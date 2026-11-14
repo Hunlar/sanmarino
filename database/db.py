@@ -30,6 +30,7 @@ async def init_db():
     )
 
     async with pool.acquire() as conn:
+
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS members (
                 group_id BIGINT NOT NULL,
@@ -63,7 +64,6 @@ async def init_db():
             )
         """)
 
-        # Kalıcı ortak yöneticiler
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS admins (
                 user_id BIGINT PRIMARY KEY,
@@ -71,7 +71,7 @@ async def init_db():
             )
         """)
 
-        # Kurucuyu her zaman yönetici olarak tut
+        # Kurucuyu otomatik yönetici yap
         await conn.execute("""
             INSERT INTO admins (user_id)
             VALUES ($1)
@@ -79,6 +79,7 @@ async def init_db():
         """, OWNER_ID)
 
 
+# Üye kaydetme
 async def save_member(group_id, user):
     if pool is None or user.is_bot:
         return
@@ -108,6 +109,7 @@ async def save_member(group_id, user):
         )
 
 
+# Grup üyelerini getir
 async def get_members(group_id):
     if pool is None:
         return []
@@ -123,6 +125,22 @@ async def get_members(group_id):
     return rows
 
 
+# Bilinen grupları getir
+async def get_known_groups():
+    if pool is None:
+        return []
+
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT DISTINCT group_id
+            FROM members
+            ORDER BY group_id
+        """)
+
+    return [row["group_id"] for row in rows]
+
+
+# Sistem istatistikleri
 async def get_bot_stats():
     if pool is None:
         return {
@@ -132,6 +150,7 @@ async def get_bot_stats():
         }
 
     async with pool.acquire() as conn:
+
         users = await conn.fetchval("""
             SELECT COUNT(DISTINCT user_id)
             FROM members
@@ -154,8 +173,7 @@ async def get_bot_stats():
     }
 
 
-# Yönetici işlemleri
-
+# Yönetici listesini getir
 async def get_admin_ids():
     if pool is None:
         return {OWNER_ID}
@@ -171,6 +189,7 @@ async def get_admin_ids():
     return admin_ids
 
 
+# Yönetici kontrolü
 async def is_admin(user_id: int):
     if user_id == OWNER_ID:
         return True
@@ -189,6 +208,7 @@ async def is_admin(user_id: int):
     return bool(result)
 
 
+# Yönetici ekle
 async def add_admin(user_id: int):
     if pool is None:
         raise RuntimeError("Veritabanı başlatılmamış!")
@@ -201,6 +221,7 @@ async def add_admin(user_id: int):
         """, user_id)
 
 
+# Yönetici kaldır
 async def remove_admin(user_id: int):
     if user_id == OWNER_ID:
         return False
@@ -217,7 +238,13 @@ async def remove_admin(user_id: int):
     return result.endswith("1")
 
 
-async def save_tag_log(user_id, group_id, command, tagged_count):
+# Etiket kayıtlarını veritabanına yaz
+async def save_tag_log(
+    user_id,
+    group_id,
+    command,
+    tagged_count
+):
     if pool is None:
         return
 
@@ -238,6 +265,7 @@ async def save_tag_log(user_id, group_id, command, tagged_count):
         )
 
 
+# Veritabanını kapat
 async def close_db():
     global pool
 
