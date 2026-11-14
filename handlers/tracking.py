@@ -2,7 +2,7 @@
 from aiogram import Router, F
 from aiogram.enums import ChatType
 
-from database.db import save_member
+from database.db import save_member, save_bot_group
 
 router = Router()
 
@@ -12,6 +12,7 @@ router = Router()
     ChatType.SUPERGROUP
 }))
 async def track_group_members(message):
+
     if not message.from_user:
         return
 
@@ -23,6 +24,14 @@ async def track_group_members(message):
             group_id=message.chat.id,
             user=message.from_user
         )
+
+        await save_bot_group(
+            bot_id=message.bot.id,
+            group_id=message.chat.id
+        )
+
     except Exception as error:
-        print(f"Üye kaydedilemedi: {type(error).__name__}")
-      
+        print(
+            "Grup bilgisi kaydedilemedi:",
+            type(error).__name__
+        )
