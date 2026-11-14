@@ -1,73 +1,90 @@
 
-import os
-from telethon import TelegramClient
-from telethon.sessions import StringSession
+import html
+
+from aiogram import Bot
+from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramRetryAfter
 
 
-class MTProtoService:
-    def __init__(self):
-        api_id = os.getenv("API_ID")
-        api_hash = os.getenv("API_HASH")
-        session_string = os.getenv("SESSION_STRING")
+def create_mention(user_id: int, full_name: str) -> str:
+    safe_name = html.escape(full_name or "İsimsiz Kullanıcı")
 
-        self.client = None
-        self.enabled = bool(api_id and api_hash and session_string)
+    return (
+        f'<a href="tg://user?id={user_id}">'
+        f'{safe_name}</a>'
+    )
 
-        if self.enabled:
-            self.client = TelegramClient(
-                StringSession(session_string),
-                int(api_id),
-                api_hash
-            )
 
-    async def start(self):
-        if not self.enabled:
-            print("MTPROTO: API_ID, API_HASH veya SESSION_STRING eksik.")
-            return
+def create_username_mention(username: str) -> str:
+    safe_username = html.escape(username.lstrip("@"))
+    return f"@{safe_username}"
 
-        await self.client.start()
-        print("MTPROTO KULLANICI OTURUMU BASARILI")
 
-    async def stop(self):
-        if self.client and self.client.is_connected():
-            await self.client.disconnect()
+def create_emoji_mention(user_id: int) -> str:
+    return f'<a href="tg://user?id={user_id}">🎯</a>'
 
-    async def get_group_members(self, chat):
-        if not self.enabled or not self.client.is_connected():
-            return None
+
+def split_messages(items, max_length=3500):
+    messages = []
+    current = ""
+
+    for item in items:
+        addition = item + "\n"
+
+        if len(current) + len(addition) > max_length:
+            if current:
+                messages.append(current)
+
+            current = addition
+        else:
+            current += addition
+
+    if current:
+        messages.append(current)
+
+    return messages
+
+
+async def send_tag_messages(
+    bot: Bot,
+    chat_id: int,
+    mentions: list,
+    prefix: str = ""
+):
+    safe_prefix = html.escape(prefix)
+
+    # Her mesajda özel metin de yer alacak
+    header = safe_prefix + "\n\n" if safe_prefix else ""
+
+    available_length = max(500, 3500 - len(header))
+    messages = split_messages(mentions, available_length)
+
+    sent_count = 0
+
+    for part in messages:
+        final_message = header + part
 
         try:
-            entity = await self.client.get_entity(chat)
-
-            participants = await self.client.get_participants(
-                entity,
-                limit=None
+            await bot.send_message(
+                chat_id=chat_id,
+                text=final_message,
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True
             )
 
-            members = []
+            sent_count += 1
 
-            for user in participants:
-                if user.bot or user.deleted:
-                    continue
-
-                full_name = " ".join(
-                    part for part in [
-                        user.first_name,
-                        user.last_name
-                    ] if part
-                )
-
-                members.append({
-                    "user_id": user.id,
-                    "username": user.username,
-                    "full_name": full_name or "İsimsiz Kullanıcı"
-                })
-
-            return members
+        except TelegramRetryAfter as error:
+            print("ETIKETLEME HIZ SINIRI:", error)
+            await bot.send_message(
+                chat_id=chat_id,
+                text="⏳ Etiketleme hız sınırına takıldı. Daha sonra tekrar deneyin."
+            )
+            break
 
         except Exception as error:
-            print("MTPROTO UYE LISTESI HATASI:", repr(error))
-            return None
+            print("ETIKET MESAJI GONDERILEMEDI:", repr(error))
+            break
 
-
-mtproto_service = MTProtoService()
+    return sent_count
+    
