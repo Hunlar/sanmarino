@@ -20,13 +20,13 @@ def create_mention(user_id: int, full_name: str) -> str:
 
 def create_username_mention(username: str) -> str:
     safe_username = html.escape(username.lstrip("@"))
-
     return f"@{safe_username}"
 
 
-def create_emoji_mention(user_id: int) -> str:
+def create_emoji_mention(user_id: int, emoji: str = "🎯") -> str:
     return (
-        f'<a href="tg://user?id={user_id}">🎯</a>'
+        f'<a href="tg://user?id={user_id}">'
+        f'{emoji}</a>'
     )
 
 
@@ -40,7 +40,6 @@ def split_messages(items, max_length=3500):
         if len(current) + len(addition) > max_length:
             if current:
                 messages.append(current)
-
             current = addition
         else:
             current += addition
@@ -55,7 +54,8 @@ async def send_tag_messages(
     bot: Bot,
     chat_id: int,
     mentions: list,
-    prefix: str = ""
+    prefix: str = "",
+    stop_event=None
 ):
     safe_prefix = html.escape(prefix.strip())
 
@@ -64,15 +64,19 @@ async def send_tag_messages(
         if safe_prefix else ""
     )
 
-    sent_count = 0
-
-    # Her mesajda 3 kişi olacak şekilde gruplandır.
     groups = [
         mentions[i:i + 3]
         for i in range(0, len(mentions), 3)
     ]
 
+    sent_count = 0
+
     for group in groups:
+
+        # Durdurma isteği kontrolü
+        if stop_event and stop_event.is_set():
+            break
+
         part = "\n".join(group) + "\n"
         final_message = header + part
 
@@ -100,4 +104,3 @@ async def send_tag_messages(
             break
 
     return sent_count
-    
