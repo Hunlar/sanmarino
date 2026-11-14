@@ -6,7 +6,6 @@ from aiogram.types import Message
 from services.clone_service import create_clone
 from services.subscription import check_subscription
 
-
 router = Router()
 
 pending_clones = set()
@@ -18,6 +17,9 @@ async def clone_command(message: Message):
         await message.reply(
             "⚠️ Klon oluşturmak için botuma özel mesajdan /clone yaz."
         )
+        return
+
+    if not message.from_user:
         return
 
     if not await check_subscription(
@@ -38,7 +40,6 @@ async def clone_command(message: Message):
         "🤖 <b>SANCAK KLON SİSTEMİ</b>\n\n"
         "1. BotFather üzerinden yeni bir bot oluştur.\n"
         "2. BotFather'ın verdiği tokeni buraya gönder.\n\n"
-        "🔒 Tokenleriniz hiçbir admin tarafından görüntülenmemektedir.\n\n"
         "Kızıl Sancak Dev saygı ile sunar.",
         parse_mode="HTML"
     )
@@ -46,23 +47,23 @@ async def clone_command(message: Message):
 
 @router.message(Command("iptal"))
 async def cancel_clone(message: Message):
-    pending_clones.discard(message.from_user.id)
+    if message.from_user:
+        pending_clones.discard(message.from_user.id)
 
     await message.answer(
         "❌ Klon oluşturma işlemi iptal edildi."
     )
 
 
-@router.message()
+@router.message(
+    lambda message: (
+        message.chat.type == "private"
+        and message.from_user is not None
+        and message.from_user.id in pending_clones
+    )
+)
 async def receive_clone_token(message: Message):
     user_id = message.from_user.id
-
-    if message.chat.type != "private":
-        return
-
-    if user_id not in pending_clones:
-        return
-
     token = (message.text or "").strip()
 
     if not token or ":" not in token:
