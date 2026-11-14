@@ -1,0 +1,23 @@
+
+{
+  "name": "Sanmarino User Tagger",
+  "description": "Telegram User Tagger Bot",
+  "keywords": ["telegram", "bot", "aiogram"],
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "eco"
+    }
+  },
+  "env": {
+    "BOT_TOKEN": {
+      "description": "Telegram bot token",
+      "required": true
+    }
+  }
+}
