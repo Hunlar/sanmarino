@@ -71,6 +71,15 @@ async def init_db():
             )
         """)
 
+        # Her grubun hangi bot tarafından kullanıldığını tutar
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS bot_groups (
+                group_id BIGINT PRIMARY KEY,
+                bot_id BIGINT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         # Kurucuyu otomatik yönetici yap
         await conn.execute("""
             INSERT INTO admins (user_id)
@@ -79,7 +88,7 @@ async def init_db():
         """, OWNER_ID)
 
 
-# Üye kaydetme
+# Üye kaydet
 async def save_member(group_id, user):
     if pool is None or user.is_bot:
         return
@@ -109,6 +118,57 @@ async def save_member(group_id, user):
         )
 
 
+# Bot ve grup eşleştirmesini kaydet
+async def save_bot_group(bot_id: int, group_id: int):
+    if pool is None:
+        return
+
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO bot_groups (
+                group_id,
+                bot_id,
+                updated_at
+            )
+            VALUES ($1, $2, CURRENT_TIMESTAMP)
+            ON CONFLICT (group_id)
+            DO UPDATE SET
+                bot_id = EXCLUDED.bot_id,
+                updated_at = CURRENT_TIMESTAMP
+        """, group_id, bot_id)
+
+
+# Belirli botun gruplarını getir
+async def get_bot_groups(bot_id: int):
+    if pool is None:
+        return []
+
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT group_id
+            FROM bot_groups
+            WHERE bot_id = $1
+            ORDER BY updated_at DESC
+        """, bot_id)
+
+    return [row["group_id"] for row in rows]
+
+
+# Bilinen bütün grupları getir
+async def get_known_groups():
+    if pool is None:
+        return []
+
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT DISTINCT group_id
+            FROM members
+            ORDER BY group_id
+        """)
+
+    return [row["group_id"] for row in rows]
+
+
 # Grup üyelerini getir
 async def get_members(group_id):
     if pool is None:
@@ -125,21 +185,6 @@ async def get_members(group_id):
     return rows
 
 
-# Bilinen grupları getir
-async def get_known_groups():
-    if pool is None:
-        return []
-
-    async with pool.acquire() as conn:
-        rows = await conn.fetch("""
-            SELECT DISTINCT group_id
-            FROM members
-            ORDER BY group_id
-        """)
-
-    return [row["group_id"] for row in rows]
-
-
 # Sistem istatistikleri
 async def get_bot_stats():
     if pool is None:
@@ -150,7 +195,6 @@ async def get_bot_stats():
         }
 
     async with pool.acquire() as conn:
-
         users = await conn.fetchval("""
             SELECT COUNT(DISTINCT user_id)
             FROM members
