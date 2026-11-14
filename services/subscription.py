@@ -13,11 +13,16 @@ async def check_subscription(bot: Bot, user_id: int) -> bool:
                 user_id=user_id
             )
 
-            if member.status not in ("member", "administrator", "creator"):
+            if member.status not in (
+                "member",
+                "administrator",
+                "creator"
+            ):
                 return False
 
         except (TelegramBadRequest, TelegramForbiddenError):
             return False
+
         except Exception:
             return False
 
@@ -34,7 +39,11 @@ async def missing_channels(bot: Bot, user_id: int) -> list:
                 user_id=user_id
             )
 
-            if member.status not in ("member", "administrator", "creator"):
+            if member.status not in (
+                "member",
+                "administrator",
+                "creator"
+            ):
                 missing.append(channel)
 
         except Exception:
