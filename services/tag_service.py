@@ -1,9 +1,12 @@
 
 import html
+import logging
 
 from aiogram import Bot
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramRetryAfter
+
+logger = logging.getLogger(__name__)
 
 
 def create_mention(user_id: int, full_name: str) -> str:
@@ -17,11 +20,14 @@ def create_mention(user_id: int, full_name: str) -> str:
 
 def create_username_mention(username: str) -> str:
     safe_username = html.escape(username.lstrip("@"))
+
     return f"@{safe_username}"
 
 
 def create_emoji_mention(user_id: int) -> str:
-    return f'<a href="tg://user?id={user_id}">🎯</a>'
+    return (
+        f'<a href="tg://user?id={user_id}">🎯</a>'
+    )
 
 
 def split_messages(items, max_length=3500):
@@ -51,17 +57,24 @@ async def send_tag_messages(
     mentions: list,
     prefix: str = ""
 ):
-    safe_prefix = html.escape(prefix)
+    safe_prefix = html.escape(prefix.strip())
 
-    # Her mesajda özel metin de yer alacak
-    header = safe_prefix + "\n\n" if safe_prefix else ""
+    header = (
+        safe_prefix + "\n\n"
+        if safe_prefix else ""
+    )
 
-    available_length = max(500, 3500 - len(header))
-    messages = split_messages(mentions, available_length)
+    available_length = 3500 - len(header)
+
+    messages = split_messages(
+        mentions,
+        max_length=available_length
+    )
 
     sent_count = 0
 
     for part in messages:
+
         final_message = header + part
 
         try:
@@ -75,15 +88,19 @@ async def send_tag_messages(
             sent_count += 1
 
         except TelegramRetryAfter as error:
-            print("ETIKETLEME HIZ SINIRI:", error)
-            await bot.send_message(
-                chat_id=chat_id,
-                text="⏳ Etiketleme hız sınırına takıldı. Daha sonra tekrar deneyin."
+
+            logger.warning(
+                "Telegram hız sınırı: %s saniye",
+                error.retry_after
             )
+
             break
 
-        except Exception as error:
-            print("ETIKET MESAJI GONDERILEMEDI:", repr(error))
+        except Exception:
+            logger.exception(
+                "Etiket mesajı gönderilemedi."
+            )
+
             break
 
     return sent_count
