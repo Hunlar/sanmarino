@@ -18,3 +18,4 @@ def register_handlers(dispatcher):
     dispatcher.include_router(funny_tag_router)
     dispatcher.include_router(admin_router)
     dispatcher.include_router(tracking_router)
+    
