@@ -1,5 +1,6 @@
 
 import random
+import logging
 
 from aiogram import Router
 from aiogram.filters import Command
@@ -14,6 +15,7 @@ from handlers.tags import can_tag
 
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 
 FUNNY_MESSAGES = [
@@ -94,52 +96,60 @@ async def funny_tag_command(message: Message):
     if not await can_tag(message):
         return
 
-    members = await get_members(message.chat.id)
+    try:
+        members = await get_members(message.chat.id)
 
-    if not members:
-        await message.reply(
-            "❌ Henüz kayıtlı üye bulunamadı."
-        )
-        return
-
-    mentions = []
-
-    for user in members:
-        if user["user_id"] == message.from_user.id:
-            continue
-
-        mentions.append(
-            create_mention(
-                user["user_id"],
-                user["full_name"]
+        if not members:
+            await message.reply(
+                "❌ Henüz kayıtlı üye bulunamadı."
             )
+            return
+
+        mentions = []
+
+        for user in members:
+            if user["user_id"] == message.from_user.id:
+                continue
+
+            mentions.append(
+                create_mention(
+                    user["user_id"],
+                    user["full_name"]
+                )
+            )
+
+        if not mentions:
+            await message.reply(
+                "❌ Etiketlenecek başka üye bulunamadı."
+            )
+            return
+
+        await message.answer(
+            random.choice(FUNNY_MESSAGES)
         )
 
-    if not mentions:
+        sent_count = await send_tag_messages(
+            message.bot,
+            message.chat.id,
+            mentions
+        )
+
+        await save_tag_log(
+            message.from_user.id,
+            message.chat.id,
+            "ktag",
+            len(mentions)
+        )
+
         await message.reply(
-            "❌ Etiketlenecek başka üye bulunamadı."
+            f"😂 Ktag tamamlandı!\n"
+            f"Etiketlenen kayıt: {len(mentions)}\n"
+            f"Gönderilen etiket mesajı: {sent_count}"
         )
-        return
 
-    await message.answer(
-        random.choice(FUNNY_MESSAGES)
-    )
-
-    sent_count = await send_tag_messages(
-        message.bot,
-        message.chat.id,
-        mentions
-    )
-
-    await save_tag_log(
-        message.from_user.id,
-        message.chat.id,
-        "ktag",
-        len(mentions)
-    )
-
-    await message.reply(
-        f"😂 Ktag tamamlandı!\n"
-        f"Etiketlenen kayıt: {len(mentions)}\n"
-        f"Gönderilen etiket mesajı: {sent_count}"
-    )
+    except Exception:
+        logger.exception("Ktag işlemi başarısız.")
+        await message.reply(
+            "❌ Ktag sırasında bir hata oluştu. "
+            "Heroku loglarını kontrol et."
+        )
