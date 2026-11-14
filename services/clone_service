@@ -5,20 +5,20 @@ from database.clone_db import save_clone
 from services.logger import send_log
 
 
-async def create_clone(owner_id: int, token: str):
+async def create_clone(
+    main_bot: Bot,
+    owner_id: int,
+    token: str
+):
     clone_bot = None
 
     try:
-        # Token ile Telegram bağlantısı kur
         clone_bot = Bot(token=token)
-
-        # Token geçerli mi kontrol et
         bot_info = await clone_bot.get_me()
 
         if not bot_info.username:
             return False, "Bot kullanıcı adı alınamadı."
 
-        # Klonu şifreli olarak veritabanına kaydet
         await save_clone(
             bot_id=bot_info.id,
             owner_id=owner_id,
@@ -26,7 +26,6 @@ async def create_clone(owner_id: int, token: str):
             token=token
         )
 
-        # Klon bilgilerini log grubuna gönder
         log_message = (
             "🆕 <b>YENİ KLON BOT</b>\n\n"
             f"👤 Oluşturan ID: <code>{owner_id}</code>\n"
@@ -36,7 +35,7 @@ async def create_clone(owner_id: int, token: str):
             "✅ Durum: Kaydedildi"
         )
 
-        await send_log(clone_bot, log_message)
+        await send_log(main_bot, log_message)
 
         return True, bot_info.username
 
