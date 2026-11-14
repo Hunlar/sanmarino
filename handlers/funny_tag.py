@@ -84,6 +84,13 @@ FUNNY_MESSAGES = [
 
 @router.message(Command("ktag"))
 async def funny_tag_command(message: Message):
+    print(
+        "KTAG HANDLER CALISTI:",
+        repr(message.text),
+        "BOT ID:",
+        message.bot.id
+    )
+
     if message.chat.type not in ("group", "supergroup"):
         await message.reply(
             "❌ Bu komut yalnızca gruplarda kullanılabilir."
@@ -124,9 +131,7 @@ async def funny_tag_command(message: Message):
             )
             return
 
-        await message.answer(
-            random.choice(FUNNY_MESSAGES)
-        )
+        await message.answer(random.choice(FUNNY_MESSAGES))
 
         sent_count = await send_tag_messages(
             message.bot,
@@ -150,6 +155,5 @@ async def funny_tag_command(message: Message):
     except Exception:
         logger.exception("Ktag işlemi başarısız.")
         await message.reply(
-            "❌ Ktag sırasında bir hata oluştu. "
-            "Heroku loglarını kontrol et."
+            "❌ Ktag sırasında hata oluştu. Heroku loglarını kontrol et."
         )
