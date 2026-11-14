@@ -1,89 +1,73 @@
 
-import html
-
-from aiogram import Bot
-from aiogram.enums import ParseMode
-from aiogram.exceptions import TelegramRetryAfter
-
-from database.db import get_members
+import os
+from telethon import TelegramClient
+from telethon.sessions import StringSession
 
 
-async def get_group_members(group_id: int):
-    return await get_members(group_id)
+class MTProtoService:
+    def __init__(self):
+        api_id = os.getenv("API_ID")
+        api_hash = os.getenv("API_HASH")
+        session_string = os.getenv("SESSION_STRING")
 
+        self.client = None
+        self.enabled = bool(api_id and api_hash and session_string)
 
-def create_mention(user_id: int, full_name: str) -> str:
-    safe_name = html.escape(full_name or "İsimsiz Kullanıcı")
+        if self.enabled:
+            self.client = TelegramClient(
+                StringSession(session_string),
+                int(api_id),
+                api_hash
+            )
 
-    return (
-        f'<a href="tg://user?id={user_id}">'
-        f'{safe_name}</a>'
-    )
+    async def start(self):
+        if not self.enabled:
+            print("MTPROTO: API_ID, API_HASH veya SESSION_STRING eksik.")
+            return
 
+        await self.client.start()
+        print("MTPROTO KULLANICI OTURUMU BASARILI")
 
-def create_username_mention(username: str) -> str:
-    safe_username = html.escape(username.lstrip("@"))
+    async def stop(self):
+        if self.client and self.client.is_connected():
+            await self.client.disconnect()
 
-    return f"@{safe_username}"
+    async def get_group_members(self, chat):
+        if not self.enabled or not self.client.is_connected():
+            return None
 
-
-def create_emoji_mention(user_id: int) -> str:
-    return f'<a href="tg://user?id={user_id}">🎯</a>'
-
-
-def split_messages(items, max_length=3500):
-    messages = []
-    current = ""
-
-    for item in items:
-        addition = item + "\n"
-
-        if len(current) + len(addition) > max_length:
-            if current:
-                messages.append(current)
-
-            current = addition
-        else:
-            current += addition
-
-    if current:
-        messages.append(current)
-
-    return messages
-
-
-async def send_tag_messages(
-    bot: Bot,
-    chat_id: int,
-    mentions: list
-):
-    messages = split_messages(mentions)
-    sent_count = 0
-
-    for message in messages:
         try:
-            await bot.send_message(
-                chat_id=chat_id,
-                text=message,
-                parse_mode=ParseMode.HTML,
-                disable_web_page_preview=True
+            entity = await self.client.get_entity(chat)
+
+            participants = await self.client.get_participants(
+                entity,
+                limit=None
             )
 
-            sent_count += 1
+            members = []
 
-        except TelegramRetryAfter as error:
-            await bot.send_message(
-                chat_id=chat_id,
-                text="Etiketleme hız sınırına takıldı. Daha sonra tekrar deneyin."
-            )
-            break
+            for user in participants:
+                if user.bot or user.deleted:
+                    continue
+
+                full_name = " ".join(
+                    part for part in [
+                        user.first_name,
+                        user.last_name
+                    ] if part
+                )
+
+                members.append({
+                    "user_id": user.id,
+                    "username": user.username,
+                    "full_name": full_name or "İsimsiz Kullanıcı"
+                })
+
+            return members
 
         except Exception as error:
-            print(
-                f"Etiket mesajı gönderilemedi: "
-                f"{type(error).__name__}"
-            )
-            break
+            print("MTPROTO UYE LISTESI HATASI:", repr(error))
+            return None
 
-    return sent_count
-          
+
+mtproto_service = MTProtoService()
