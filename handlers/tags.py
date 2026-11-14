@@ -4,14 +4,10 @@ import logging
 
 from aiogram import Router
 from aiogram.filters import Command
-from aiogram.types import (
-    Message,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
-)
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 from config import TAG_COOLDOWN
-from database.db import get_members, save_tag_log
+from database.db import save_tag_log
 from services.tag_service import (
     create_mention,
     create_username_mention,
@@ -20,6 +16,7 @@ from services.tag_service import (
 )
 from services.subscription import check_subscription
 from services.clone_runtime import clone_runtime
+from services.mtproto_service import mtproto_service
 
 
 router = Router()
@@ -50,10 +47,8 @@ async def is_group_admin(message: Message) -> bool:
         return True
 
     except Exception:
-        logger.exception("Grup yöneticisi kontrolü başarısız.")
-        await message.reply(
-            "⚠️ Yönetici yetkin kontrol edilemedi. Botun yetkilerini kontrol et."
-        )
+        logger.exception("Yönetici kontrolü başarısız.")
+        await message.reply("⚠️ Yönetici yetkin kontrol edilemedi.")
         return False
 
 
@@ -70,9 +65,7 @@ async def can_tag(message: Message) -> bool:
         )
     except Exception:
         logger.exception("Abonelik kontrolü başarısız.")
-        await message.reply(
-            "⚠️ Kanal üyeliği kontrol edilirken hata oluştu."
-        )
+        await message.reply("⚠️ Kanal üyeliği kontrol edilirken hata oluştu.")
         return False
 
     if not subscribed:
@@ -122,30 +115,41 @@ async def can_tag(message: Message) -> bool:
 
 
 async def run_tag(message: Message, mode: str):
-    print(
-        "TAG COMMAND HANDLER CALISTI:",
-        mode,
-        repr(message.text),
-        "BOT ID:",
-        message.bot.id
-    )
-
     if not message.from_user:
         return
 
     if not await can_tag(message):
         return
 
+    # /tag - mesaj şeklindeki özel metni al
+    command_text = message.text or ""
+    parts = command_text.split(maxsplit=1)
+    prefix = ""
+
+    if len(parts) > 1:
+        prefix = parts[1].strip()
+
+        if prefix.startswith("-"):
+            prefix = prefix[1:].strip()
+
     last_tag_time[message.chat.id] = time.time()
 
     try:
-        members = await get_members(message.chat.id)
+        # MTProto ile gruptaki üyeleri getir
+        members = await mtproto_service.get_group_members(
+            message.chat.id
+        )
+
+        if members is None:
+            await message.reply(
+                "❌ Tüm üyeleri listelemek için MTProto kullanıcı "
+                "oturumu gerekli. API_ID, API_HASH ve SESSION_STRING "
+                "ayarlarını kontrol et."
+            )
+            return
 
         if not members:
-            await message.reply(
-                "❌ Henüz kayıtlı üye bulunamadı. "
-                "Bot üyeleri mesajlardan tanıdıkça kaydedecek."
-            )
+            await message.reply("❌ Grupta etiketlenecek üye bulunamadı.")
             return
 
         mentions = []
@@ -165,15 +169,14 @@ async def run_tag(message: Message, mode: str):
                 mentions.append(create_emoji_mention(user_id))
 
         if not mentions:
-            await message.reply(
-                "❌ Etiketlenecek uygun üye bulunamadı."
-            )
+            await message.reply("❌ Etiketlenecek uygun üye bulunamadı.")
             return
 
         sent_count = await send_tag_messages(
             message.bot,
             message.chat.id,
-            mentions
+            mentions,
+            prefix=prefix
         )
 
         await save_tag_log(
@@ -185,12 +188,12 @@ async def run_tag(message: Message, mode: str):
 
         await message.reply(
             f"✅ Etiketleme tamamlandı.\n"
-            f"Etiketlenen kayıt: {len(mentions)}\n"
+            f"Etiketlenen üye: {len(mentions)}\n"
             f"Gönderilen mesaj: {sent_count}"
         )
 
     except Exception:
-        logger.exception("Etiketleme işlemi başarısız.")
+        logger.exception("Etiketleme başarısız.")
         await message.reply(
             "❌ Etiketleme sırasında hata oluştu. Heroku loglarını kontrol et."
         )
