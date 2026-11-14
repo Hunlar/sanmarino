@@ -56,29 +56,68 @@ class CloneRuntime:
                 await bot.session.close()
                 return
 
-            self.bots[info.id] = bot
-            self.tasks[info.id] = asyncio.create_task(
-                self.poll_bot(bot)
-            )
+            try:
+                # Webhook varsa kaldır, bekleyen güncellemeleri koru
+                await bot.delete_webhook(
+                    drop_pending_updates=False
+                )
 
-    async def start(self, dispatcher: Dispatcher, main_bot: Bot):
+                self.bots[info.id] = bot
+
+                self.tasks[info.id] = asyncio.create_task(
+                    self.poll_bot(bot)
+                )
+
+            except Exception:
+                self.bots.pop(info.id, None)
+                self.tasks.pop(info.id, None)
+                await bot.session.close()
+                raise
+
+    async def start(
+        self,
+        dispatcher: Dispatcher,
+        main_bot: Bot
+    ):
         self.dispatcher = dispatcher
         self.main_bot = main_bot
 
+        # Ana botu başlat
         await self.add_bot(main_bot)
 
-        saved_clones = await get_clones()
+        # Kayıtlı klonları yükle
+        try:
+            saved_clones = await get_clones()
+        except Exception as error:
+            print(
+                "Klon kayıtları yüklenemedi:",
+                type(error).__name__
+            )
+            return
 
         for clone in saved_clones:
+            bot = None
+
             try:
                 bot = Bot(token=clone["token"])
                 await self.add_bot(bot)
+
+                print(
+                    "Klon bot başlatıldı:",
+                    clone["username"]
+                )
 
             except Exception as error:
                 print(
                     "Klon yüklenemedi:",
                     type(error).__name__
                 )
+
+                if bot is not None:
+                    try:
+                        await bot.session.close()
+                    except Exception:
+                        pass
 
     async def stop(self):
         for task in self.tasks.values():
@@ -91,11 +130,15 @@ class CloneRuntime:
             )
 
         for bot in self.bots.values():
-            await bot.session.close()
+            try:
+                await bot.session.close()
+            except Exception:
+                pass
 
         self.tasks.clear()
         self.bots.clear()
         self.main_bot = None
+        self.dispatcher = None
 
 
 clone_runtime = CloneRuntime()
