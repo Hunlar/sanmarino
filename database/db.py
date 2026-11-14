@@ -2,6 +2,7 @@
 import asyncpg
 import os
 
+from config import OWNER_ID
 
 pool = None
 
@@ -61,6 +62,21 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # Kalıcı ortak yöneticiler
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS admins (
+                user_id BIGINT PRIMARY KEY,
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Kurucuyu her zaman yönetici olarak tut
+        await conn.execute("""
+            INSERT INTO admins (user_id)
+            VALUES ($1)
+            ON CONFLICT (user_id) DO NOTHING
+        """, OWNER_ID)
 
 
 async def save_member(group_id, user):
@@ -136,6 +152,69 @@ async def get_bot_stats():
         "groups": groups or 0,
         "clones": clones or 0
     }
+
+
+# Yönetici işlemleri
+
+async def get_admin_ids():
+    if pool is None:
+        return {OWNER_ID}
+
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT user_id FROM admins
+        """)
+
+    admin_ids = {row["user_id"] for row in rows}
+    admin_ids.add(OWNER_ID)
+
+    return admin_ids
+
+
+async def is_admin(user_id: int):
+    if user_id == OWNER_ID:
+        return True
+
+    if pool is None:
+        return False
+
+    async with pool.acquire() as conn:
+        result = await conn.fetchval("""
+            SELECT EXISTS(
+                SELECT 1 FROM admins
+                WHERE user_id = $1
+            )
+        """, user_id)
+
+    return bool(result)
+
+
+async def add_admin(user_id: int):
+    if pool is None:
+        raise RuntimeError("Veritabanı başlatılmamış!")
+
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO admins (user_id)
+            VALUES ($1)
+            ON CONFLICT (user_id) DO NOTHING
+        """, user_id)
+
+
+async def remove_admin(user_id: int):
+    if user_id == OWNER_ID:
+        return False
+
+    if pool is None:
+        raise RuntimeError("Veritabanı başlatılmamış!")
+
+    async with pool.acquire() as conn:
+        result = await conn.execute("""
+            DELETE FROM admins
+            WHERE user_id = $1
+        """, user_id)
+
+    return result.endswith("1")
 
 
 async def save_tag_log(user_id, group_id, command, tagged_count):
