@@ -1,5 +1,6 @@
 
 import asyncio
+import traceback
 
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramRetryAfter
@@ -19,6 +20,9 @@ class CloneRuntime:
         offset = None
         allowed_updates = self.dispatcher.resolve_used_update_types()
 
+        print("BOT POLLING BASLADI:", bot.id)
+        print("DINLENEN GUNCELLEMELER:", allowed_updates)
+
         while True:
             try:
                 updates = await bot.get_updates(
@@ -30,22 +34,33 @@ class CloneRuntime:
                 for update in updates:
                     offset = update.update_id + 1
 
-                    await self.dispatcher.feed_update(
-                        bot,
-                        update
-                    )
+                    if update.message:
+                        print(
+                            "GELEN MESAJ:",
+                            "BOT:", bot.id,
+                            "SOHBET:", update.message.chat.type,
+                            "CHAT ID:", update.message.chat.id,
+                            "METIN:", repr(update.message.text)
+                        )
+                    else:
+                        print(
+                            "GELEN GUNCELLEME:",
+                            "BOT:", bot.id,
+                            "TUR:", update.event_type
+                        )
+
+                    await self.dispatcher.feed_update(bot, update)
 
             except asyncio.CancelledError:
                 raise
 
             except TelegramRetryAfter as error:
+                print("TELEGRAM BEKLEME HATASI:", error.retry_after)
                 await asyncio.sleep(error.retry_after)
 
-            except Exception as error:
-                print(
-                    "Bot bağlantı hatası:",
-                    type(error).__name__
-                )
+            except Exception:
+                print("BOT POLLING HATASI:", bot.id)
+                traceback.print_exc()
                 await asyncio.sleep(5)
 
     async def add_bot(self, bot: Bot):
@@ -57,10 +72,7 @@ class CloneRuntime:
                 return
 
             try:
-                # Webhook varsa kaldır, bekleyen güncellemeleri koru
-                await bot.delete_webhook(
-                    drop_pending_updates=False
-                )
+                await bot.delete_webhook(drop_pending_updates=False)
 
                 self.bots[info.id] = bot
 
@@ -68,31 +80,33 @@ class CloneRuntime:
                     self.poll_bot(bot)
                 )
 
+                print(
+                    "BOT SISTEME EKLENDI:",
+                    info.username,
+                    info.id
+                )
+
             except Exception:
                 self.bots.pop(info.id, None)
                 self.tasks.pop(info.id, None)
+
                 await bot.session.close()
                 raise
 
-    async def start(
-        self,
-        dispatcher: Dispatcher,
-        main_bot: Bot
-    ):
+    async def start(self, dispatcher: Dispatcher, main_bot: Bot):
         self.dispatcher = dispatcher
         self.main_bot = main_bot
 
-        # Ana botu başlat
+        print("ANA BOT BASLATILIYOR...")
+
         await self.add_bot(main_bot)
 
-        # Kayıtlı klonları yükle
         try:
             saved_clones = await get_clones()
-        except Exception as error:
-            print(
-                "Klon kayıtları yüklenemedi:",
-                type(error).__name__
-            )
+
+        except Exception:
+            print("KLON KAYITLARI YUKLENEMEDI:")
+            traceback.print_exc()
             return
 
         for clone in saved_clones:
@@ -100,18 +114,20 @@ class CloneRuntime:
 
             try:
                 bot = Bot(token=clone["token"])
+
                 await self.add_bot(bot)
 
                 print(
-                    "Klon bot başlatıldı:",
+                    "KLON BOT BASLATILDI:",
                     clone["username"]
                 )
 
-            except Exception as error:
+            except Exception:
                 print(
-                    "Klon yüklenemedi:",
-                    type(error).__name__
+                    "KLON YUKLENEMEDI:",
+                    clone.get("username", "Bilinmeyen")
                 )
+                traceback.print_exc()
 
                 if bot is not None:
                     try:
@@ -120,6 +136,8 @@ class CloneRuntime:
                         pass
 
     async def stop(self):
+        print("BOTLAR KAPATILIYOR...")
+
         for task in self.tasks.values():
             task.cancel()
 
@@ -137,8 +155,11 @@ class CloneRuntime:
 
         self.tasks.clear()
         self.bots.clear()
+
         self.main_bot = None
         self.dispatcher = None
+
+        print("BOTLAR KAPATILDI.")
 
 
 clone_runtime = CloneRuntime()
