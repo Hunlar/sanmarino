@@ -9,7 +9,6 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
 )
-from aiogram.exceptions import TelegramAPIError
 
 from config import TAG_COOLDOWN
 from database.db import get_members, save_tag_log
@@ -42,22 +41,24 @@ async def is_group_admin(message: Message) -> bool:
             user_id=message.from_user.id
         )
 
-        return member.status in ("administrator", "creator")
+        if member.status not in ("administrator", "creator"):
+            await message.reply(
+                "❌ Bu komutu yalnızca grup yöneticileri kullanabilir."
+            )
+            return False
 
-    except TelegramAPIError:
+        return True
+
+    except Exception:
         logger.exception("Grup yöneticisi kontrolü başarısız.")
         await message.reply(
-            "⚠️ Yönetici yetkin kontrol edilemedi. "
-            "Botun gruptaki yetkilerini kontrol edin."
+            "⚠️ Yönetici yetkin kontrol edilemedi. Botun yetkilerini kontrol et."
         )
         return False
 
 
 async def can_tag(message: Message) -> bool:
     if not await is_group_admin(message):
-        await message.reply(
-            "❌ Bu komutu yalnızca grup yöneticileri kullanabilir."
-        )
         return False
 
     check_bot = clone_runtime.main_bot or message.bot
@@ -70,8 +71,7 @@ async def can_tag(message: Message) -> bool:
     except Exception:
         logger.exception("Abonelik kontrolü başarısız.")
         await message.reply(
-            "⚠️ Kanal üyeliği kontrol edilirken bağlantı hatası oluştu. "
-            "Lütfen tekrar dene."
+            "⚠️ Kanal üyeliği kontrol edilirken hata oluştu."
         )
         return False
 
@@ -109,10 +109,10 @@ async def can_tag(message: Message) -> bool:
         return False
 
     now = time.time()
-    last_time = last_tag_time.get(message.chat.id, 0)
+    last_time_value = last_tag_time.get(message.chat.id, 0)
 
-    if now - last_time < TAG_COOLDOWN:
-        remaining = int(TAG_COOLDOWN - (now - last_time))
+    if now - last_time_value < TAG_COOLDOWN:
+        remaining = int(TAG_COOLDOWN - (now - last_time_value))
         await message.reply(
             f"⏳ Tekrar etiketleme için {remaining} saniye beklemelisin."
         )
@@ -122,6 +122,14 @@ async def can_tag(message: Message) -> bool:
 
 
 async def run_tag(message: Message, mode: str):
+    print(
+        "TAG COMMAND HANDLER CALISTI:",
+        mode,
+        repr(message.text),
+        "BOT ID:",
+        message.bot.id
+    )
+
     if not message.from_user:
         return
 
@@ -184,8 +192,7 @@ async def run_tag(message: Message, mode: str):
     except Exception:
         logger.exception("Etiketleme işlemi başarısız.")
         await message.reply(
-            "❌ Etiketleme sırasında bir hata oluştu. "
-            "Lütfen Heroku loglarını kontrol et."
+            "❌ Etiketleme sırasında hata oluştu. Heroku loglarını kontrol et."
         )
 
 
