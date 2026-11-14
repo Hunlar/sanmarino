@@ -8,7 +8,7 @@ def start_keyboard():
             [
                 InlineKeyboardButton(
                     text="➕ Beni Gruba Ekle",
-                    url="https://t.me/SancakTagBot?startgroup=true"
+                    url="https://t.me/SancaklarTagBot?startgroup=true"
                 )
             ],
             [
