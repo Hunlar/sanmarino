@@ -8,6 +8,10 @@ from config import BOT_TOKEN, validate_config
 from database.db import init_db, close_db
 from handlers import register_handlers
 from services.clone_runtime import clone_runtime
+from services.ban_service import (
+    GlobalBanMiddleware,
+    init_ban_db
+)
 
 
 logging.basicConfig(
@@ -22,36 +26,32 @@ async def main():
     bot = Bot(token=BOT_TOKEN)
     dispatcher = Dispatcher()
 
+    # Bütün botların güncellemelerinde ortak ban kontrolü
+    dispatcher.update.middleware(
+        GlobalBanMiddleware()
+    )
+
     try:
-        # Veritabanını başlat
         await init_db()
-        logging.info("Veritabanı başlatıldı.")
+        await init_ban_db()
 
-        # Bütün komutları bağla
         register_handlers(dispatcher)
-        logging.info("Komutlar yüklendi.")
 
-        # Ana bot ve klon botları çalıştır
         await clone_runtime.start(
             dispatcher=dispatcher,
             main_bot=bot
         )
 
-        logging.info("Sancak Tag Bot çalışıyor.")
-
-        # Botların çalışmasını bekle
         while True:
             await asyncio.sleep(3600)
 
     finally:
         await clone_runtime.stop()
         await close_db()
-        logging.info("Bot sistemi kapatıldı.")
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logging.info("Bot durduruldu.")
-        
+        print("Bot kapatıldı.")
