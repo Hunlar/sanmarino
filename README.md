@@ -1,5 +1,5 @@
 
-# 🏴 SANCAK
+# 🏴 dis
 ### Advanced discord Community Management System
 
 <p align="center">
