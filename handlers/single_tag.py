@@ -1,5 +1,6 @@
 
 import logging
+from html import escape
 
 from aiogram import Router
 from aiogram.filters import Command
@@ -57,13 +58,33 @@ async def tag_one_command(message: Message):
         return
 
     try:
+        # Komuttaki özel mesajı al: /tagone - mesaj
+        custom_text = ""
+
+        if message.text:
+            parts = message.text.split(maxsplit=1)
+
+            if len(parts) > 1:
+                argument = parts[1].strip()
+
+                if argument.startswith("-"):
+                    custom_text = argument[1:].strip()
+
         mention = create_mention(
             target.id,
             target.full_name
         )
 
+        if custom_text:
+            response = (
+                f"🎯 {escape(custom_text)}\n\n"
+                f"{mention}"
+            )
+        else:
+            response = f"🎯 {mention}"
+
         await message.answer(
-            f"🎯 {mention}",
+            response,
             parse_mode="HTML"
         )
 
