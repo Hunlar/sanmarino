@@ -1,17 +1,17 @@
 
+import logging
+
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
-from database.db import save_tag_log
-from services.tag_service import (
-    create_mention,
-    send_tag_messages,
-)
+from services.tag_service import create_mention
 from handlers.tags import can_tag
+from database.db import save_tag_log
 
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 
 @router.message(Command("tagone"))
@@ -20,6 +20,9 @@ async def tag_one_command(message: Message):
         await message.reply(
             "❌ Bu komut yalnızca gruplarda kullanılabilir."
         )
+        return
+
+    if not message.from_user:
         return
 
     if not message.reply_to_message:
@@ -31,25 +34,32 @@ async def tag_one_command(message: Message):
 
     target = message.reply_to_message.from_user
 
-    if not target or target.is_bot:
-        await message.reply("❌ Bu kullanıcı etiketlenemiyor.")
+    if not target:
+        await message.reply(
+            "❌ Bu mesajın sahibini tespit edemedim."
+        )
+        return
+
+    if target.is_bot:
+        await message.reply(
+            "❌ Botları etiketleyemezsin."
+        )
         return
 
     if not await can_tag(message):
         return
 
-    mention = create_mention(
-        target.id,
-        target.full_name
-    )
+    try:
+        mention = create_mention(
+            target.id,
+            target.full_name
+        )
 
-    sent_count = await send_tag_messages(
-        message.bot,
-        message.chat.id,
-        [mention]
-    )
+        await message.answer(
+            f"🎯 {mention}",
+            parse_mode="HTML"
+        )
 
-    if sent_count:
         await save_tag_log(
             message.from_user.id,
             message.chat.id,
@@ -57,11 +67,9 @@ async def tag_one_command(message: Message):
             1
         )
 
+    except Exception:
+        logger.exception("Tagone işlemi başarısız.")
         await message.reply(
-            f"✅ {target.full_name} etiketlendi."
+            "❌ Tekli etiketleme sırasında hata oluştu. "
+            "Heroku loglarını kontrol et."
         )
-    else:
-        await message.reply(
-            "❌ Etiketleme mesajı gönderilemedi."
-        )
-      
