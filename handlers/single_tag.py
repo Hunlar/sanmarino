@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 @router.message(Command("tagone"))
 async def tag_one_command(message: Message):
+    print(
+        "TAGONE HANDLER CALISTI:",
+        repr(message.text),
+        "BOT ID:",
+        message.bot.id
+    )
+
     if message.chat.type not in ("group", "supergroup"):
         await message.reply(
             "❌ Bu komut yalnızca gruplarda kullanılabilir."
