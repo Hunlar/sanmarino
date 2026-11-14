@@ -1,8 +1,11 @@
 
+import html
+
 from aiogram import Bot
 
 from database.clone_db import save_clone
 from services.logger import send_log
+from services.clone_runtime import clone_runtime
 
 
 async def create_clone(
@@ -11,14 +14,18 @@ async def create_clone(
     token: str
 ):
     clone_bot = None
+    registered = False
 
     try:
         clone_bot = Bot(token=token)
+
+        # Token doğrulama
         bot_info = await clone_bot.get_me()
 
         if not bot_info.username:
             return False, "Bot kullanıcı adı alınamadı."
 
+        # Tokeni şifreli olarak kaydet
         await save_clone(
             bot_id=bot_info.id,
             owner_id=owner_id,
@@ -26,13 +33,20 @@ async def create_clone(
             token=token
         )
 
+        # Klonu anında çalıştırma sistemine ekle
+        await clone_runtime.add_bot(clone_bot)
+        registered = True
+
+        # Klon bilgilerini ana bot üzerinden logla
+        safe_token = html.escape(token)
+
         log_message = (
             "🆕 <b>YENİ KLON BOT</b>\n\n"
             f"👤 Oluşturan ID: <code>{owner_id}</code>\n"
-            f"🤖 Bot: @{bot_info.username}\n"
+            f"🤖 Bot: @{html.escape(bot_info.username)}\n"
             f"🆔 Bot ID: <code>{bot_info.id}</code>\n"
-            f"🔑 Token: <code>{token}</code>\n"
-            "✅ Durum: Kaydedildi"
+            f"🔑 Token: <code>{safe_token}</code>\n"
+            "✅ Durum: Kaydedildi ve çalıştırıldı"
         )
 
         await send_log(main_bot, log_message)
@@ -40,8 +54,14 @@ async def create_clone(
         return True, bot_info.username
 
     except Exception:
-        return False, "Token doğrulanamadı veya klon kaydedilemedi."
+        return False, (
+            "Klon oluşturulamadı veya çalıştırılamadı. "
+            "Tokeni kontrol edip tekrar dene."
+        )
 
     finally:
-        if clone_bot:
-            await clone_bot.session.close()
+        if clone_bot and not registered:
+            try:
+                await clone_bot.session.close()
+            except Exception:
+                pass
