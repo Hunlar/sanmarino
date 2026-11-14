@@ -1,5 +1,6 @@
 
 import time
+import logging
 
 from aiogram import Router
 from aiogram.filters import Command
@@ -8,6 +9,7 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
 )
+from aiogram.exceptions import TelegramAPIError
 
 from config import TAG_COOLDOWN
 from database.db import get_members, save_tag_log
@@ -23,10 +25,12 @@ from services.clone_runtime import clone_runtime
 
 router = Router()
 last_tag_time = {}
+logger = logging.getLogger(__name__)
 
 
 async def is_group_admin(message: Message) -> bool:
     if message.chat.type not in ("group", "supergroup"):
+        await message.reply("❌ Bu komut yalnızca gruplarda kullanılabilir.")
         return False
 
     if not message.from_user:
@@ -34,12 +38,18 @@ async def is_group_admin(message: Message) -> bool:
 
     try:
         member = await message.bot.get_chat_member(
-            message.chat.id,
-            message.from_user.id
+            chat_id=message.chat.id,
+            user_id=message.from_user.id
         )
+
         return member.status in ("administrator", "creator")
 
-    except Exception:
+    except TelegramAPIError:
+        logger.exception("Grup yöneticisi kontrolü başarısız.")
+        await message.reply(
+            "⚠️ Yönetici yetkin kontrol edilemedi. "
+            "Botun gruptaki yetkilerini kontrol edin."
+        )
         return False
 
 
@@ -58,7 +68,12 @@ async def can_tag(message: Message) -> bool:
             message.from_user.id
         )
     except Exception:
-        subscribed = False
+        logger.exception("Abonelik kontrolü başarısız.")
+        await message.reply(
+            "⚠️ Kanal üyeliği kontrol edilirken bağlantı hatası oluştu. "
+            "Lütfen tekrar dene."
+        )
+        return False
 
     if not subscribed:
         bot_info = await message.bot.get_me()
@@ -86,12 +101,8 @@ async def can_tag(message: Message) -> bool:
 
         await message.reply(
             "⚠️ <b>ABONELİK GEREKLİ!</b>\n\n"
-            "Botu kullanabilmek için lütfen önce "
-            "aşağıdaki butona basarak bota özelden "
-            "<b>/start</b> verin.\n\n"
-            "Ardından iki zorunlu kanalımıza da abone olun. "
-            "Aboneliğinizi tamamladıktan sonra grup komutunu "
-            "tekrar kullanabilirsiniz.",
+            "Önce bota özelden /start ver ve iki zorunlu "
+            "kanalımıza katıl. Ardından komutu tekrar kullan.",
             reply_markup=keyboard,
             parse_mode="HTML"
         )
@@ -107,7 +118,6 @@ async def can_tag(message: Message) -> bool:
         )
         return False
 
-    last_tag_time[message.chat.id] = now
     return True
 
 
@@ -118,56 +128,65 @@ async def run_tag(message: Message, mode: str):
     if not await can_tag(message):
         return
 
-    members = await get_members(message.chat.id)
+    last_tag_time[message.chat.id] = time.time()
 
-    if not members:
-        await message.reply(
-            "❌ Henüz kayıtlı üye bulunamadı. "
-            "Bot üyeleri mesajlardan tanıdıkça kaydedecek."
-        )
-        return
+    try:
+        members = await get_members(message.chat.id)
 
-    mentions = []
+        if not members:
+            await message.reply(
+                "❌ Henüz kayıtlı üye bulunamadı. "
+                "Bot üyeleri mesajlardan tanıdıkça kaydedecek."
+            )
+            return
 
-    for user in members:
-        user_id = user["user_id"]
-        username = user["username"]
-        full_name = user["full_name"]
+        mentions = []
 
-        if mode == "tag":
-            mentions.append(create_mention(user_id, full_name))
+        for user in members:
+            user_id = user["user_id"]
+            username = user["username"]
+            full_name = user["full_name"]
 
-        elif mode == "utag":
-            if username:
+            if mode == "tag":
+                mentions.append(create_mention(user_id, full_name))
+
+            elif mode == "utag" and username:
                 mentions.append(create_username_mention(username))
 
-        elif mode == "etag":
-            mentions.append(create_emoji_mention(user_id))
+            elif mode == "etag":
+                mentions.append(create_emoji_mention(user_id))
 
-    if not mentions:
-        await message.reply(
-            "❌ Etiketlenecek uygun üye bulunamadı."
+        if not mentions:
+            await message.reply(
+                "❌ Etiketlenecek uygun üye bulunamadı."
+            )
+            return
+
+        sent_count = await send_tag_messages(
+            message.bot,
+            message.chat.id,
+            mentions
         )
-        return
 
-    sent_count = await send_tag_messages(
-        message.bot,
-        message.chat.id,
-        mentions
-    )
+        await save_tag_log(
+            message.from_user.id,
+            message.chat.id,
+            mode,
+            len(mentions)
+        )
 
-    await save_tag_log(
-        message.from_user.id,
-        message.chat.id,
-        mode,
-        len(mentions)
-    )
+        await message.reply(
+            f"✅ Etiketleme tamamlandı.\n"
+            f"Etiketlenen kayıt: {len(mentions)}\n"
+            f"Gönderilen mesaj: {sent_count}"
+        )
 
-    await message.reply(
-        f"✅ Etiketleme tamamlandı.\n"
-        f"Etiketlenen kayıt: {len(mentions)}\n"
-        f"Gönderilen mesaj: {sent_count}"
-    )
+    except Exception:
+        logger.exception("Etiketleme işlemi başarısız.")
+        await message.reply(
+            "❌ Etiketleme sırasında bir hata oluştu. "
+            "Lütfen Heroku loglarını kontrol et."
+        )
 
 
 @router.message(Command("tag"))
