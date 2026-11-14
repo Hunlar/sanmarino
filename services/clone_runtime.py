@@ -10,6 +10,7 @@ from database.clone_db import get_clones
 class CloneRuntime:
     def __init__(self):
         self.dispatcher = None
+        self.main_bot = None
         self.bots = {}
         self.tasks = {}
         self.lock = asyncio.Lock()
@@ -62,6 +63,7 @@ class CloneRuntime:
 
     async def start(self, dispatcher: Dispatcher, main_bot: Bot):
         self.dispatcher = dispatcher
+        self.main_bot = main_bot
 
         await self.add_bot(main_bot)
 
@@ -93,6 +95,7 @@ class CloneRuntime:
 
         self.tasks.clear()
         self.bots.clear()
+        self.main_bot = None
 
 
 clone_runtime = CloneRuntime()
