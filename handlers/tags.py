@@ -9,7 +9,7 @@ from aiogram.types import (
     InlineKeyboardButton,
 )
 
-from config import TAG_COOLDOWN, REQUIRED_CHANNELS
+from config import TAG_COOLDOWN
 from database.db import get_members, save_tag_log
 from services.tag_service import (
     create_mention,
@@ -22,7 +22,6 @@ from services.clone_runtime import clone_runtime
 
 
 router = Router()
-
 last_tag_time = {}
 
 
@@ -30,12 +29,14 @@ async def is_group_admin(message: Message) -> bool:
     if message.chat.type not in ("group", "supergroup"):
         return False
 
+    if not message.from_user:
+        return False
+
     try:
         member = await message.bot.get_chat_member(
             message.chat.id,
             message.from_user.id
         )
-
         return member.status in ("administrator", "creator")
 
     except Exception:
@@ -43,16 +44,12 @@ async def is_group_admin(message: Message) -> bool:
 
 
 async def can_tag(message: Message) -> bool:
-    if not message.from_user:
-        return False
-
     if not await is_group_admin(message):
         await message.reply(
             "❌ Bu komutu yalnızca grup yöneticileri kullanabilir."
         )
         return False
 
-    # Klon botlarda da aboneliği ana bot kontrol eder.
     check_bot = clone_runtime.main_bot or message.bot
 
     try:
@@ -88,11 +85,12 @@ async def can_tag(message: Message) -> bool:
         )
 
         await message.reply(
-            "⚠️ <b>Abonelik Gerekli!</b>\n\n"
-            "Bu botu kullanabilmek için lütfen önce "
-            "bota özelden <b>/start</b> verin.\n\n"
-            "Ardından aşağıdaki iki kanala da abone olun. "
-            "Aboneliklerinizi tamamladıktan sonra komutu "
+            "⚠️ <b>ABONELİK GEREKLİ!</b>\n\n"
+            "Botu kullanabilmek için lütfen önce "
+            "aşağıdaki butona basarak bota özelden "
+            "<b>/start</b> verin.\n\n"
+            "Ardından iki zorunlu kanalımıza da abone olun. "
+            "Aboneliğinizi tamamladıktan sonra grup komutunu "
             "tekrar kullanabilirsiniz.",
             reply_markup=keyboard,
             parse_mode="HTML"
@@ -137,23 +135,19 @@ async def run_tag(message: Message, mode: str):
         full_name = user["full_name"]
 
         if mode == "tag":
-            mentions.append(
-                create_mention(user_id, full_name)
-            )
+            mentions.append(create_mention(user_id, full_name))
 
         elif mode == "utag":
             if username:
-                mentions.append(
-                    create_username_mention(username)
-                )
+                mentions.append(create_username_mention(username))
 
         elif mode == "etag":
-            mentions.append(
-                create_emoji_mention(user_id)
-            )
+            mentions.append(create_emoji_mention(user_id))
 
     if not mentions:
-        await message.reply("❌ Etiketlenecek uygun üye bulunamadı.")
+        await message.reply(
+            "❌ Etiketlenecek uygun üye bulunamadı."
+        )
         return
 
     sent_count = await send_tag_messages(
