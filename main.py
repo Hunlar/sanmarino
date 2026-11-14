@@ -26,7 +26,6 @@ async def main():
     bot = Bot(token=BOT_TOKEN)
     dispatcher = Dispatcher()
 
-    # Bütün botların güncellemelerinde ortak ban kontrolü
     dispatcher.update.middleware(
         GlobalBanMiddleware()
     )
@@ -36,6 +35,22 @@ async def main():
         await init_ban_db()
 
         register_handlers(dispatcher)
+
+        print("\n========== ROUTER KONTROLÜ ==========")
+        print("TOPLAM ROUTER:", len(dispatcher.sub_routers))
+
+        for router in dispatcher.sub_routers:
+            print("ROUTER:", router.name)
+
+            observer = router.message
+
+            print(
+                "MESSAGE HANDLER SAYISI:",
+                router.name,
+                len(observer.handlers)
+            )
+
+        print("========== ROUTER KONTROLÜ BİTTİ ==========\n")
 
         await clone_runtime.start(
             dispatcher=dispatcher,
