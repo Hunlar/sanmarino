@@ -64,17 +64,16 @@ async def send_tag_messages(
         if safe_prefix else ""
     )
 
-    available_length = 3500 - len(header)
-
-    messages = split_messages(
-        mentions,
-        max_length=available_length
-    )
-
     sent_count = 0
 
-    for part in messages:
+    # Her mesajda 3 kişi olacak şekilde gruplandır.
+    groups = [
+        mentions[i:i + 3]
+        for i in range(0, len(mentions), 3)
+    ]
 
+    for group in groups:
+        part = "\n".join(group) + "\n"
         final_message = header + part
 
         try:
@@ -88,19 +87,16 @@ async def send_tag_messages(
             sent_count += 1
 
         except TelegramRetryAfter as error:
-
             logger.warning(
                 "Telegram hız sınırı: %s saniye",
                 error.retry_after
             )
-
             break
 
         except Exception:
             logger.exception(
                 "Etiket mesajı gönderilemedi."
             )
-
             break
 
     return sent_count
