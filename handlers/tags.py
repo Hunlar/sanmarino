@@ -1,6 +1,5 @@
 
 import time
-import html
 import logging
 
 from aiogram import Router
@@ -58,10 +57,11 @@ async def is_group_admin(message: Message) -> bool:
         return True
 
     except Exception:
-        logger.exception("Yönetici kontrolü başarısız.")
+        logger.exception("Grup yöneticisi kontrolü başarısız.")
 
         await message.reply(
-            "⚠️ Yönetici yetkin kontrol edilemedi."
+            "⚠️ Yönetici yetkin kontrol edilemedi. "
+            "Botun yetkilerini kontrol et."
         )
 
         return False
@@ -98,7 +98,10 @@ async def can_tag(message: Message) -> bool:
                 [
                     InlineKeyboardButton(
                         text="🤖 Bota Özelden Start Ver",
-                        url=f"https://t.me/{bot_info.username}?start=subscribe"
+                        url=(
+                            f"https://t.me/"
+                            f"{bot_info.username}?start=subscribe"
+                        )
                     )
                 ],
                 [
@@ -116,8 +119,8 @@ async def can_tag(message: Message) -> bool:
 
         await message.reply(
             "⚠️ <b>ABONELİK GEREKLİ!</b>\n\n"
-            "Önce bota özelden /start ver ve zorunlu "
-            "kanallarımıza katıl.",
+            "Önce bota özelden /start ver ve iki zorunlu "
+            "kanalımıza katıl. Ardından komutu tekrar kullan.",
             reply_markup=keyboard,
             parse_mode="HTML"
         )
@@ -126,16 +129,20 @@ async def can_tag(message: Message) -> bool:
 
     now = time.time()
 
-    last_time = last_tag_time.get(message.chat.id, 0)
+    last_time_value = last_tag_time.get(
+        message.chat.id,
+        0
+    )
 
-    if now - last_time < TAG_COOLDOWN:
+    if now - last_time_value < TAG_COOLDOWN:
 
         remaining = int(
-            TAG_COOLDOWN - (now - last_time)
+            TAG_COOLDOWN - (now - last_time_value)
         )
 
         await message.reply(
-            f"⏳ Tekrar etiketlemek için {remaining} saniye bekle."
+            f"⏳ Tekrar etiketlemek için "
+            f"{remaining} saniye beklemelisin."
         )
 
         return False
@@ -153,12 +160,12 @@ def get_custom_text(message: Message) -> str:
     if len(parts) < 2:
         return ""
 
-    text = parts[1].strip()
+    command_text = parts[1].strip()
 
-    if text.startswith("-"):
-        text = text[1:].strip()
+    if command_text.startswith("-"):
+        command_text = command_text[1:].strip()
 
-    return text
+    return command_text
 
 
 async def run_tag(message: Message, mode: str):
@@ -169,37 +176,57 @@ async def run_tag(message: Message, mode: str):
     if not await can_tag(message):
         return
 
-    last_tag_time[message.chat.id] = time.time()
+    custom_text = get_custom_text(message)
 
     status = await message.reply(
-        "🔎 Grup üyeleri kontrol ediliyor..."
+        "🔎 <b>Grup üyeleri alınıyor...</b>",
+        parse_mode="HTML"
     )
 
     try:
 
-        # Her klon kendi bot tokeniyle üye listesini sorgular.
+        # Her bot kendi tokeniyle MTProto bağlantısı kurar.
         members = await mtproto_service.get_group_members(
             message.chat.id,
             bot_token=message.bot.token
         )
 
-        if members is None or not members:
+        if members is None:
 
             await status.edit_text(
                 "❌ Grup üyeleri alınamadı.\n\n"
-                "Bot tokeni, API_ID, API_HASH ve "
-                "Telegram erişim izinlerini kontrol et."
+                "API_ID, API_HASH ve BOT_TOKEN ayarlarını "
+                "kontrol et. Telegram erişim kısıtlamaları "
+                "da bu hataya neden olabilir."
+            )
+
+            return
+
+        if not members:
+
+            await status.edit_text(
+                "❌ Etiketlenecek üye bulunamadı."
             )
 
             return
 
         mentions = []
+        seen_ids = set()
 
         for user in members:
 
-            user_id = user["user_id"]
+            user_id = user.get("user_id")
+
+            if not user_id or user_id in seen_ids:
+                continue
+
+            seen_ids.add(user_id)
+
             username = user.get("username")
-            full_name = user.get("full_name") or "İsimsiz Kullanıcı"
+            full_name = (
+                user.get("full_name")
+                or "İsimsiz Kullanıcı"
+            )
 
             if mode == "tag":
 
@@ -226,26 +253,17 @@ async def run_tag(message: Message, mode: str):
         if not mentions:
 
             await status.edit_text(
-                "❌ Etiketlenecek uygun üye bulunamadı."
+                "❌ Bu etiketleme türü için uygun üye bulunamadı."
             )
 
             return
 
-        # Bütün komutlarda özel mesaj desteği.
-        custom_text = get_custom_text(message)
-
-        outgoing_items = list(mentions)
-
-        if custom_text:
-            outgoing_items.insert(
-                0,
-                html.escape(custom_text)
-            )
-
+        # Özel mesaj bütün etiketleme türlerinde kullanılır.
         sent_count = await send_tag_messages(
             message.bot,
             message.chat.id,
-            outgoing_items
+            mentions,
+            prefix=custom_text
         )
 
         await save_tag_log(
@@ -255,21 +273,26 @@ async def run_tag(message: Message, mode: str):
             len(mentions)
         )
 
+        last_tag_time[message.chat.id] = time.time()
+
         await status.edit_text(
             "✅ <b>Etiketleme tamamlandı!</b>\n\n"
             f"👥 Etiketlenen üye: {len(mentions)}\n"
             f"📨 Gönderilen mesaj: {sent_count}\n"
-            f"📝 Özel mesaj: {'Var' if custom_text else 'Yok'}",
+            f"📝 Özel mesaj: "
+            f"{'Var' if custom_text else 'Yok'}",
             parse_mode="HTML"
         )
 
     except Exception as error:
 
-        logger.exception("Etiketleme başarısız.")
+        logger.exception(
+            "Etiketleme işlemi başarısız."
+        )
 
         await status.edit_text(
-            "❌ Etiketleme başarısız oldu.\n\n"
-            f"Hata: <code>{html.escape(str(error)[:700])}</code>",
+            "❌ <b>Etiketleme başarısız oldu.</b>\n\n"
+            f"Hata: <code>{str(error)[:700]}</code>",
             parse_mode="HTML"
         )
 
@@ -287,4 +310,4 @@ async def username_tag_command(message: Message):
 @router.message(Command("etag"))
 async def emoji_tag_command(message: Message):
     await run_tag(message, "etag")
-            
+    
