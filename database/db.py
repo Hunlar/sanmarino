@@ -14,7 +14,6 @@ async def init_db():
     if not database_url:
         raise RuntimeError("DATABASE_URL ayarlanmamış!")
 
-    # Heroku bağlantı adresini düzenle
     if database_url.startswith("postgres://"):
         database_url = database_url.replace(
             "postgres://",
@@ -108,6 +107,37 @@ async def get_members(group_id):
     return rows
 
 
+async def get_bot_stats():
+    if pool is None:
+        return {
+            "users": 0,
+            "groups": 0,
+            "clones": 0
+        }
+
+    async with pool.acquire() as conn:
+        users = await conn.fetchval("""
+            SELECT COUNT(DISTINCT user_id)
+            FROM members
+        """)
+
+        groups = await conn.fetchval("""
+            SELECT COUNT(DISTINCT group_id)
+            FROM members
+        """)
+
+        clones = await conn.fetchval("""
+            SELECT COUNT(*)
+            FROM clones
+        """)
+
+    return {
+        "users": users or 0,
+        "groups": groups or 0,
+        "clones": clones or 0
+    }
+
+
 async def save_tag_log(user_id, group_id, command, tagged_count):
     if pool is None:
         return
@@ -135,4 +165,3 @@ async def close_db():
     if pool is not None:
         await pool.close()
         pool = None
-      
